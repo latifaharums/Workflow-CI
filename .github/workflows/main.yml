@@ -41,26 +41,24 @@ jobs:
 
     - name: Run MLflow Project
       run: |
-        # Jalankan mlflow run di root repo (pastikan MLproject ada di root)
         mlflow run . --env-manager=local --run-name rf_fixed_run
 
     - name: Get latest MLflow run_id
       run: |
-        echo "Getting latest run ID..."
-        python <<EOF
+        python -c "
 import mlflow
 client = mlflow.tracking.MlflowClient()
-experiment = client.get_experiment_by_name("${{ env.EXPERIMENT_NAME }}")
+experiment = client.get_experiment_by_name('${{ env.EXPERIMENT_NAME }}')
 if experiment is None:
-    raise Exception("Experiment not found.")
-runs = client.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"])
+    raise Exception('Experiment not found.')
+runs = client.search_runs(experiment_ids=[experiment.experiment_id], order_by=['start_time DESC'])
 if not runs:
-    raise Exception("No runs found in the experiment.")
+    raise Exception('No runs found in the experiment.')
 run_id = runs[0].info.run_id
-print(f"Latest run ID: {run_id}")
-with open("${GITHUB_ENV}", "a") as f:
-    f.write(f"RUN_ID={run_id}\n")
-EOF
+print(f'Latest run ID: {run_id}')
+with open('${GITHUB_ENV}', 'a') as f:
+    f.write(f'RUN_ID={run_id}\n')
+"
 
     - name: Install Python Dependencies
       run: |
