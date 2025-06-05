@@ -125,7 +125,7 @@ if __name__ == "__main__":
         input_example = X_train.iloc[:5]
         mlflow.sklearn.log_model(
             model, artifact_path="rf_best_model", input_example=input_example,
-            pip_requirements="requirements.txt"
+            conda_env="conda.yaml"
         )
 
         print(f"Tuning selesai dan model berhasil dicatat ke MLflow DagsHub")
