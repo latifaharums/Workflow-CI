@@ -1,17 +1,13 @@
-name: mlflow-env
+name: wine_quality_env
 channels:
+  - defaults
   - conda-forge
 dependencies:
-  - python=3.12.9
-  - pip<=25.1
+  - python=3.10
+  - pip
   - pip:
-    - pandas==2.2.3
-    - scikit-learn==1.6.1
-    - mlflow==2.19.0
-    - matplotlib>=3.0
-    - seaborn>=0.11
-    - numpy>=1.20
-    - dagshub>=0.3
-    - python-dotenv>=0.19
-    - imbalanced-learn>=0.8 
-    - click>=8.0
+      - mlflow==2.19.0
+      - scikit-learn
+      - pandas
+      - numpy
+      - python-dotenv
