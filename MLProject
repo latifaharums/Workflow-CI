@@ -21,10 +21,12 @@ entry_points:
       experiment_name: {type: string, default: "WineQuality_CI_Advanced"}
       run_name_prefix: {type: string, default: "CI_RF_AdvancedRun"}
       model_artifact_path: {type: string, default: "random_forest_model_ci"}
+      model_output: {type: str, default: "rf_model.pkl"}
 
     command: >-
       python modelling.py
-      --data_file {data_file}
+      --data_path {data_path} 
+      --model_output {model_output}
       --target_column {target_column}
       --test_split_size {test_split_size}
       --random_state_split {random_state_split}
