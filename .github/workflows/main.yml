@@ -42,7 +42,7 @@ jobs:
 
     - name: Run MLflow Project
       run: |
-        mlflow run . --env-manager=local --run-name rf_fixed_run \
+        mlflow run --env-manager=local --run-name rf_fixed_run
 
     - name: Get latest MLflow run_id
       run: |
