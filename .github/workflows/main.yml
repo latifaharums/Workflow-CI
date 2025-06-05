@@ -1,4 +1,4 @@
-name: CI/CD MLflow Red Wine
+name: CI/CD MLflow
 
 on:
   push:
@@ -9,8 +9,8 @@ on:
       - main
 
 env:
-  EXPERIMENT_NAME: Red_Wine_Tunning
-  CSV_URL: preprocessed_winequality-red.csv
+  EXPERIMENT_NAME: WineQuality_LogisticRegression_Tuning
+  CSV_URL: processed_winequality-red.csv
   TARGET_VAR: quality
   MLFLOW_TRACKING_URI: https://dagshub.com/latifaharums/Membangun_model.mlflow/
   MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
@@ -29,63 +29,41 @@ jobs:
       with:
         python-version: "3.12"
 
-    - name: Check Env Variables
+    - name: Check Env
       run: |
-        echo "CSV URL: $CSV_URL"
-        echo "Experiment Name: $EXPERIMENT_NAME"
-        echo "MLflow Tracking URI: $MLFLOW_TRACKING_URI"
+        echo $CSV_URL
 
-    - name: Install MLflow and dotenv
+    - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install mlflow python-dotenv
-
-    - name: Ensure Experiment Exists
-      run: |
-        python <<EOF
-        import mlflow
-        from mlflow.tracking import MlflowClient
-        import os
-
-        client = MlflowClient()
-        experiment_name = os.getenv("EXPERIMENT_NAME")
-        experiment = client.get_experiment_by_name(experiment_name)
-        if experiment is None:
-            client.create_experiment(experiment_name)
-            print(f"Experiment '{experiment_name}' created.")
-        else:
-            print(f"Experiment '{experiment_name}' already exists.")
-        EOF
+        pip install mlflow
+        pip install python-dotenv
 
     - name: Run MLflow Project
       run: |
-        mlflow run . --env-manager=local --run-name rf_fixed_run -P data_path=processed_winequality-red.csv
+        mlflow run MLProject --env-manager=local --run-name rf_fixed_run --experiment-name "${{ env.EXPERIMENT_NAME }}"
 
     - name: Get latest MLflow run_id
       run: |
         echo "Getting latest run ID..."
         python <<EOF
         import mlflow
-        from mlflow.tracking import MlflowClient
-        import os
-
-        client = MlflowClient()
-        experiment_name = os.getenv("EXPERIMENT_NAME")
-        experiment = client.get_experiment_by_name(experiment_name)
+        client = mlflow.tracking.MlflowClient()
+        experiment = client.get_experiment_by_name("${{ env.EXPERIMENT_NAME }}")
         if experiment is None:
-            raise Exception("Experiment not found.")
+          raise Exception("Experiment not found.")
         runs = client.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"])
         if not runs:
-            raise Exception("No runs found in the experiment.")
+          raise Exception("No runs found in the experiment.")
         run_id = runs[0].info.run_id
         print(f"Latest run ID: {run_id}")
-        with open(os.environ["GITHUB_ENV"], "a") as f:
-            f.write(f"RUN_ID={run_id}\n")
+        with open("${GITHUB_ENV}", "a") as f:
+          f.write(f"RUN_ID={run_id}\n")
         EOF
 
-    - name: Install Python Dependencies from MLProject
+    - name: Install Python Dependencies
       run: |
-        pip install -r requirements.txt
+        pip install -r MLProject/requirements.txt
 
     - name: Download Model Artifact from MLflow
       run: |
@@ -94,26 +72,26 @@ jobs:
           --artifact-path rf_best_model \
           --dst-path downloaded_artifact
 
-    - name: Upload Artifact to GitHub Actions
+    - name: Upload Artifact to GitHub
       uses: actions/upload-artifact@v4
       with:
         name: rf_model_artifact
         path: downloaded_artifact/
 
-    - name: Build Docker Model with MLflow
+    - name: Build Docker Model
       run: |
-        mlflow models build-docker --model-uri "runs:/$RUN_ID/rf_best_model" --name "red_wine_model"
+        mlflow models build-docker --model-uri "runs:/$RUN_ID/rf_best_model" --name "telco_customer_churn_model"
 
     - name: Log in to Docker Hub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        password: ${{ secrets.DOCKER_PASSWORD }} 
 
     - name: Tag Docker Image
       run: |
-        docker tag red_wine_model ${{ secrets.DOCKER_USERNAME }}/red_wine_model:latest
+        docker tag telco_customer_churn_model ${{ secrets.DOCKER_USERNAME }}/telco_customer_churn_model:latest
 
-    - name: Push Docker Image to Docker Hub
+    - name: Push Docker Image
       run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/red_wine_model:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/telco_customer_churn_model:latest
