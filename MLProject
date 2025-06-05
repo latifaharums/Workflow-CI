@@ -1,41 +1,11 @@
-name: WineQualityPredictionCI
+name: winequality-rf
 
 conda_env: conda.yaml
 
 entry_points:
   main:
     parameters:
-      data_file: {type: string, default: "processed_winequality-red.csv"}
-      target_column: {type: string, default: "quality"} # Atau 'quality_category' jika Anda melakukan grouping
-      test_split_size: {type: float, default: 0.2}
-      random_state_split: {type: int, default: 42}
-      # Parameter untuk RandomForestClassifier
-      n_estimators: {type: int, default: 100}
-      max_depth_rf: {type: string, default: "None"} # "None" akan dikonversi ke None di Python
-      min_samples_leaf_rf: {type: int, default: 1}
-      class_weight_rf: {type: string, default: "balanced"} # 'balanced', 'balanced_subsample', atau 'None'
-      # Parameter untuk SMOTE (opsional, bisa di-enable/disable)
-      use_smote: {type: string, default: "True"} # "True" atau "False"
-      random_state_smote: {type: int, default: 42}
-      # Parameter untuk MLflow Tracking
-      experiment_name: {type: string, default: "WineQuality_CI_Advanced"}
-      run_name_prefix: {type: string, default: "CI_RF_AdvancedRun"}
-      model_artifact_path: {type: string, default: "random_forest_model_ci"}
-      model_output: {type: str, default: "rf_model.pkl"}
-
-    command: >-
-      python modelling.py
-      --data_path {data_path} 
-      --model_output {model_output}
-      --target_column {target_column}
-      --test_split_size {test_split_size}
-      --random_state_split {random_state_split}
-      --n_estimators {n_estimators}
-      --max_depth_rf {max_depth_rf}
-      --min_samples_leaf_rf {min_samples_leaf_rf}
-      --class_weight_rf {class_weight_rf}
-      --use_smote {use_smote}
-      --random_state_smote {random_state_smote}
-      --experiment_name {experiment_name}
-      --run_name_prefix {run_name_prefix}
-      --model_artifact_path {model_artifact_path}
+      csv_url: {type: str, default: "processed_winequality.csv"}
+      target_var: {type: str, default: "quality"}
+    command: >
+      python modelling.py --csv_url {csv_url} --target_var {target_var}
