@@ -47,7 +47,7 @@ print("Parameter terbaik:", clf.best_params_)
 print("Akurasi:", acc)
 print("Classification Report:\n", report)
 
-
+mlflow.set_experiment("Red_Wine_Tunning")
 mlflow.log_params(clf.best_params_)
 mlflow.log_metric("accuracy", acc)
 
