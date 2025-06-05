@@ -1,0 +1,148 @@
+name: MLflow CI, Docker Build & Push
+
+on:
+  push:
+    branches:
+      - main 
+    paths: 
+      - 'wine_quality_project/**'
+      - '.github/workflows/main.yml'
+  workflow_dispatch:
+
+jobs:
+  train_log_build_push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0} # Penting untuk aktivasi environment conda di setiap step run
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python (untuk setup micromamba)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' 
+
+      - name: Install Conda environment with Micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: wine_quality_project/conda.yaml
+          environment-name: wine_quality_ci_env
+          cache-environment: true
+          init-shell: bash
+
+      - name: Configure DagsHub MLflow Credentials
+        run: |
+          echo "Setting DagsHub credentials..."
+          echo "MLFLOW_TRACKING_URI=https://dagshub.com/${{ secrets.DAGSHUB_USERNAME }}/${{ secrets.DAGSHUB_REPONAME }}.mlflow" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_USERNAME=${{ secrets.DAGSHUB_USERNAME }}" >> $GITHUB_ENV
+          echo "MLFLOW_TRACKING_PASSWORD=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
+          # Untuk dagshub.init() jika digunakan di skrip (meskipun skrip di atas tidak memakainya langsung)
+          echo "DAGSHUB_USER_TOKEN=${{ secrets.DAGSHUB_TOKEN }}" >> $GITHUB_ENV
+          echo "DAGSHUB_USERNAME=${{ secrets.DAGSHUB_USERNAME }}" >> $GITHUB_ENV
+          echo "DAGSHUB_REPONAME=${{ secrets.DAGSHUB_REPONAME }}" >> $GITHUB_ENV # Agar skrip bisa ambil nama repo dari env
+
+
+      - name: Run MLflow Project and Capture Output
+        id: mlflow_run_step # ID 
+        run: |
+          echo "Running MLflow project..."
+          cd wine_quality_project
+          
+          # Jalankan MLflow project dengan parameter. Anda bisa menyesuaikan parameter ini.
+          # Output dari skrip modelling.py akan ditangkap.
+          COMMAND_OUTPUT=$(micromamba run -n wine_quality_ci_env mlflow run . \
+            -P n_estimators=150 \
+            -P max_depth_rf="20" \
+            -P experiment_name="WineQuality_CI_CD_Advanced" \
+            -P run_name_prefix="CI_Run_${{ github.run_number }}" \
+            -P use_smote="True")
+          
+          echo "MLflow Run Command Output:"
+          echo "${COMMAND_OUTPUT}"
+          
+          # Ekstrak RUN_ID dan MODEL_PATH dari output skrip modelling.py
+          MLFLOW_RUN_ID_LINE=$(echo "${COMMAND_OUTPUT}" | grep "MLFLOW_RUN_ID:")
+          MLFLOW_MODEL_PATH_LINE=$(echo "${COMMAND_OUTPUT}" | grep "MLFLOW_MODEL_PATH:")
+          
+          if [[ -z "$MLFLOW_RUN_ID_LINE" || -z "$MLFLOW_MODEL_PATH_LINE" ]]; then
+            echo "Error: Tidak dapat mengekstrak RUN_ID atau MODEL_PATH dari output MLflow run."
+            echo "Output lengkap adalah:"
+            echo "${COMMAND_OUTPUT}"
+            exit 1
+          fi
+          
+          EXTRACTED_RUN_ID=$(echo "$MLFLOW_RUN_ID_LINE" | cut -d':' -f2)
+          EXTRACTED_MODEL_PATH=$(echo "$MLFLOW_MODEL_PATH_LINE" | cut -d':' -f2)
+          
+          echo "Extracted MLflow Run ID: $EXTRACTED_RUN_ID"
+          echo "Extracted MLflow Model Path: $EXTRACTED_MODEL_PATH"
+          
+          # Set output untuk step ini agar bisa digunakan di step selanjutnya
+          echo "run_id=$EXTRACTED_RUN_ID" >> $GITHUB_OUTPUT
+          echo "model_path=$EXTRACTED_MODEL_PATH" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
+        if: success() 
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Docker image using MLflow
+        if: success()
+        id: docker_build_push_step
+        env: 
+            MLFLOW_TRACKING_URI: https://dagshub.com/${{ secrets.DAGSHUB_USERNAME }}/${{ secrets.DAGSHUB_REPONAME }}.mlflow
+            MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+            MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          echo "Building Docker image for the model..."
+          echo "Run ID: ${{ steps.mlflow_run_step.outputs.run_id }}"
+          echo "Model Path in Run: ${{ steps.mlflow_run_step.outputs.model_path }}"
+          
+          MODEL_URI="runs:/${{ steps.mlflow_run_step.outputs.run_id }}/${{ steps.mlflow_run_step.outputs.model_path }}"
+          # Gunakan nama repo GitHub Anda dan SHA commit untuk nama image agar unik dan terkait
+          REPO_NAME=$(echo "${{ github.repository }}" | awk -F'/' '{print $2}' | tr '[:upper:]' '[:lower:]')
+          DOCKER_IMAGE_NAME="${{ secrets.DOCKERHUB_USERNAME }}/${REPO_NAME}-wine-quality:${{ github.sha }}"
+          
+          echo "Menggunakan Model URI: $MODEL_URI"
+          echo "Nama Docker Image: $DOCKER_IMAGE_NAME"
+          
+          # Pastikan environment conda aktif untuk perintah mlflow
+          micromamba run -n wine_quality_ci_env mlflow models build-docker \
+            --model-uri "$MODEL_URI" \
+            --name "$DOCKER_IMAGE_NAME" \
+            --enable-mlserver # Menggunakan MLServer untuk serving (praktik yang baik)
+
+          echo "Docker image berhasil dibangun. Mendorong ke Docker Hub..."
+          docker push "$DOCKER_IMAGE_NAME"
+          echo "Docker image berhasil didorong ke Docker Hub."
+          
+          # Simpan nama image Docker untuk step selanjutnya
+          echo "docker_image_name=$DOCKER_IMAGE_NAME" >> $GITHUB_OUTPUT
+          
+          # Update file dockerhub_link.txt
+          echo "Link Docker Hub Image:" > wine_quality_project/dockerhub_link.txt
+          echo "Image: $DOCKER_IMAGE_NAME" >> wine_quality_project/dockerhub_link.txt
+          echo "Pull command: docker pull $DOCKER_IMAGE_NAME" >> wine_quality_project/dockerhub_link.txt
+          echo "URL: https://hub.docker.com/r/${{ secrets.DOCKERHUB_USERNAME }}/${REPO_NAME}-wine-quality" >> wine_quality_project/dockerhub_link.txt
+
+
+      - name: Commit Docker Hub link back to repository
+        if: success()
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add wine_quality_project/dockerhub_link.txt
+          
+          # Cek apakah ada perubahan untuk di-commit
+          if git diff --staged --quiet; then
+            echo "Tidak ada perubahan pada dockerhub_link.txt untuk di-commit."
+          else
+            git commit -m "Update link Docker Hub image: ${{ steps.docker_build_push_step.outputs.docker_image_name }}"
+            # Tambahkan retry sederhana untuk push jika ada isu sementara
+            for i in 1 2 3; do git push && break || sleep 5; done
+          fi
