@@ -124,7 +124,8 @@ if __name__ == "__main__":
         # Log model dengan contoh input supaya hilang warning signature
         input_example = X_train.iloc[:5]
         mlflow.sklearn.log_model(
-            model, artifact_path="rf_best_model", input_example=input_example
+            model, artifact_path="rf_best_model", input_example=input_example,
+            pip_requirements="requirements.txt"
         )
 
         print(f"Tuning selesai dan model berhasil dicatat ke MLflow DagsHub")
