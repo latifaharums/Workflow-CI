@@ -1,4 +1,4 @@
-name: wine_quality_ci_env
+name: mlflow-env
 channels:
   - conda-forge
 dependencies:
