@@ -1,5 +1,6 @@
 name: mlflow-env
 channels:
+  - defaults
   - conda-forge
 dependencies:
   - python=3.12.9
