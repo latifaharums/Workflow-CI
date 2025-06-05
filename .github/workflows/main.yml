@@ -3,32 +3,30 @@ name: MLflow CI, Docker Build & Push
 on:
   push:
     branches:
-      - main 
-    paths: 
+      - main # Atau branch utama Anda
+    paths: # Hanya trigger jika ada perubahan di dalam folder proyek MLflow atau workflow itu sendiri
       - 'wine_quality_project/**'
       - '.github/workflows/main.yml'
-  workflow_dispatch: 
+  workflow_dispatch: # Memungkinkan trigger manual dari UI GitHub Actions
 
 jobs:
   train_log_build_push:
     runs-on: ubuntu-latest
     defaults:
       run:
-        shell: bash -el {0} 
+        shell: bash -e {0} # Disederhanakan, -l dihapus
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Step 'Set up Python' DIHAPUS dari sini
-
       - name: Install Conda environment with Micromamba
         uses: mamba-org/setup-micromamba@v1
         with:
-          environment-file: conda.yaml
+          environment-file: wine_quality_project/conda.yaml
           environment-name: wine_quality_ci_env
-          cache-environment: true
-          init-shell: bash # Inisialisasi shell untuk micromamba
+          cache-environment: false # <<--- DINONAKTIFKAN SEMENTARA
+          init-shell: bash
 
       - name: Configure DagsHub MLflow Credentials
         run: |
