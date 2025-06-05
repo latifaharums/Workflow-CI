@@ -21,6 +21,13 @@ if username is None or token is None:
 # Set URI MLflow untuk DagsHub
 mlflow.set_tracking_uri(f"https://dagshub.com/{username}/{dagshub_repo_name}.mlflow")
 mlflow.set_experiment("WineQuality_LogisticRegression_Tuning")
+runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], order_by=["attributes.start_time DESC"], max_results=1)
+
+if runs.empty:
+    raise Exception("No runs found in the experiment.")
+
+latest_run_id = runs.iloc[0]["run_id"]
+print(f"Latest run ID: {latest_run_id}")
 
 def modeling_with_tuning(X_train, X_val, y_train, y_val):
     # Grid search parameter Logistic Regression
