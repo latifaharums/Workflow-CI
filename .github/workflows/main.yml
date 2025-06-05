@@ -41,7 +41,7 @@ jobs:
 
     - name: Run MLflow Project
       run: |
-        mlflow run MLProject --env-manager=local --run-name rf_fixed_run --experiment-name "${{ env.EXPERIMENT_NAME }}"
+        mlflow run . --env-manager=local --run-name rf_fixed_run --experiment-name "${{ env.EXPERIMENT_NAME }}"
 
     - name: Get latest MLflow run_id
       run: |
@@ -80,7 +80,7 @@ jobs:
 
     - name: Build Docker Model
       run: |
-        mlflow models build-docker --model-uri "runs:/$RUN_ID/rf_best_model" --name "telco_customer_churn_model"
+        mlflow models build-docker --model-uri "runs:/$RUN_ID/rf_best_model" --name "redwine-model"
 
     - name: Log in to Docker Hub
       uses: docker/login-action@v2
@@ -90,8 +90,8 @@ jobs:
 
     - name: Tag Docker Image
       run: |
-        docker tag telco_customer_churn_model ${{ secrets.DOCKER_USERNAME }}/telco_customer_churn_model:latest
+        docker tag telco_customer_churn_model ${{ secrets.DOCKER_USERNAME }}/redwine-model:latest
 
     - name: Push Docker Image
       run: |
-        docker push ${{ secrets.DOCKER_USERNAME }}/telco_customer_churn_model:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/redwine-model:latest
