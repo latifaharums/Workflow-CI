@@ -2,166 +2,114 @@ import os
 import pandas as pd
 import mlflow
 import mlflow.sklearn
-from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, train_test_split # Tambahkan train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from dotenv import load_dotenv
-from imblearn.over_sampling import SMOTE
-import click
-import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Load Env
+load_dotenv()
 
-def none_or_str(value):
-    if isinstance(value, str) and value.lower() in ['none', 'null']:
-        return None
-    return value
+# Read env
+username = os.getenv("MLFLOW_TRACKING_USERNAME")
+token = os.getenv("MLFLOW_TRACKING_PASSWORD")
+dagshub_repo_name = "Membangun_model" 
 
-def none_or_int(value):
-    if isinstance(value, str) and value.lower() in ['none', 'null']:
-        return None
+if username is None or token is None:
+    raise ValueError("MLFLOW_TRACKING_USERNAME atau MLFLOW_TRACKING_PASSWORD tidak ditemukan di .env")
+
+# Set URI MLflow untuk DagsHub
+mlflow.set_tracking_uri(f"https://dagshub.com/{username}/{dagshub_repo_name}.mlflow")
+mlflow.set_experiment("WineQuality_LogisticRegression_Tuning")
+
+def modeling_with_tuning(X_train, X_val, y_train, y_val):
+    # Grid search parameter Logistic Regression
+    param_grid = {
+        "C": [0.01, 0.1, 1.0, 10],
+        "penalty": ["l2"], 
+        "solver": ["liblinear", "lbfgs"] 
+    }
+
+    model = RandomForestClassifier(random_state=42)
+    param_grid = {
+    'n_estimators': [100, 150, 200],
+    'max_depth': [10, 20, None],
+    'min_samples_leaf': [1, 2, 4],
+    'class_weight': ['balanced'] # Langsung tangani imbalance di sini!
+}
+    
+    grid_search = GridSearchCV(model, param_grid, cv=3, scoring="accuracy", n_jobs=-1, verbose=1)
+    grid_search.fit(X_train, y_train)
+
+    best_model = grid_search.best_estimator_
+    y_pred = best_model.predict(X_val)
+    accuracy = accuracy_score(y_val, y_pred)
+    report = classification_report(y_val, y_pred, output_dict=True, zero_division=0)
+
+
+    print("Parameter terbaik:", grid_search.best_params_)
+    print("Akurasi:", accuracy)
+    print("Classification Report:")
+    print(classification_report(y_val, y_pred, zero_division=0))
+
+
+    return best_model, accuracy, report, grid_search.best_params_
+
+if __name__ == "__main__":
+    data_path = "processed_winequality-red.csv"
+    
     try:
-        return int(value)
-    except ValueError:
-        logger.warning(f"Tidak dapat mengkonversi '{value}' ke integer. Menggunakan None.")
-        return None
-
-@click.command()
-@click.option('--data_file', default='processed_winequality-red.csv', help='Path ke file dataset CSV.')
-@click.option('--target_column', default='quality', help='Nama kolom target.')
-@click.option('--test_split_size', type=float, default=0.2, help='Proporsi dataset untuk test set.')
-@click.option('--random_state_split', type=int, default=42, help='Random state untuk train_test_split.')
-@click.option('--n_estimators', type=int, default=100, help='Jumlah trees di Random Forest.')
-@click.option('--max_depth_rf', default="None", help='Kedalaman maksimum Random Forest (string "None" atau integer).')
-@click.option('--min_samples_leaf_rf', type=int, default=1, help='Jumlah minimum sampel per leaf di Random Forest.')
-@click.option('--class_weight_rf', default='balanced', help='Class weight untuk Random Forest ("balanced", "balanced_subsample", atau "None").')
-@click.option('--use_smote', type=click.BOOL, default=True, help='Gunakan SMOTE untuk oversampling (True/False).')
-@click.option('--random_state_smote', type=int, default=42, help='Random state untuk SMOTE.')
-@click.option('--experiment_name', default='WineQuality_CI_Default', help='Nama eksperimen MLflow.')
-@click.option('--run_name_prefix', default='CI_RF_Run', help='Prefix untuk nama run MLflow.')
-@click.option('--model_artifact_path', default='random_forest_model_ci', help='Path artefak untuk model yang di-log di MLflow.')
-@click.option('--tuning', is_flag=True, help='Aktifkan hyperparameter tuning menggunakan GridSearchCV.')
-def train_model(data_file, target_column, test_split_size, random_state_split,
-                n_estimators, max_depth_rf, min_samples_leaf_rf, class_weight_rf,
-                use_smote, random_state_smote,
-                experiment_name, run_name_prefix, model_artifact_path,
-                tuning):
-    logger.info("Memulai proses training model...")
-
-    load_dotenv()
-
-    # Tidak mengatur mlflow.set_tracking_uri, MLflow jalan default lokal
-
-    mlflow.set_experiment(experiment_name)
-    logger.info(f"Eksperimen MLflow diatur ke: {experiment_name}")
-
-    try:
-        logger.info(f"Memuat data dari: {data_file}")
-        data = pd.read_csv(data_file)
-        logger.info(f"Data berhasil dimuat. Shape: {data.shape}")
+        print(f"Mencoba memuat data dari: {data_path}")
+        data = pd.read_csv(data_path)
+        print("Data berhasil dimuat.")
+        print("Kolom data:", data.columns.tolist())
     except FileNotFoundError:
-        logger.error(f"ERROR: File dataset '{data_file}' tidak ditemukan.")
-        return
+        print(f"ERROR: File dataset '{data_path}' tidak ditemukan. Pastikan file tersebut ada di lokasi yang benar.")
+        exit() 
+
+    target_column = 'quality' 
 
     if target_column not in data.columns:
-        logger.error(f"ERROR: Kolom target '{target_column}' tidak ditemukan. Kolom tersedia: {data.columns.tolist()}")
-        return
+        print(f"ERROR: Kolom target '{target_column}' tidak ditemukan dalam dataset.")
+        print(f"Kolom yang tersedia adalah: {data.columns.tolist()}")
+        exit()
 
     X = data.drop(target_column, axis=1)
     y = data[target_column]
-    logger.info(f"Fitur (X) shape: {X.shape}, Target (y) shape: {y.shape}")
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_split_size, random_state=random_state_split,
-        stratify=y if y.nunique() > 1 else None
-    )
-    logger.info(f"Train set: {X_train.shape}, Test set: {X_test.shape}")
+    # Pisahkan data menjadi training dan validation set
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y if y.nunique() > 1 else None)
 
-    if use_smote:
-        logger.info("Menerapkan SMOTE pada data training...")
-        smote = SMOTE(random_state=random_state_smote)
-        X_train, y_train = smote.fit_resample(X_train, y_train)
-        logger.info(f"Shape setelah SMOTE: X_train: {X_train.shape}, y_train: {y_train.value_counts().sort_index().to_dict()}")
+    print(f"Ukuran X_train: {X_train.shape}")
+    print(f"Ukuran X_val: {X_val.shape}")
+    print(f"Ukuran y_train: {y_train.shape}")
+    print(f"Ukuran y_val: {y_val.shape}")
 
-    run_name = f"{run_name_prefix}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}"
-    with mlflow.start_run(run_name=run_name) as run:
-        run_id = run.info.run_id
-        logger.info(f"MLflow Run ID: {run_id} dimulai untuk run: {run_name}")
+    with mlflow.start_run(run_name="LogReg_Tuning_SingleFile"):
+        model, accuracy, report_dict, best_params = modeling_with_tuning(
+            X_train, X_val, y_train, y_val
+        )
 
-        mlflow.log_params({
-            "data_file": data_file, "target_column": target_column, "test_split_size": test_split_size,
-            "random_state_split": random_state_split, "use_smote": use_smote,
-            "random_state_smote": random_state_smote if use_smote else "N/A",
-            "tuning": tuning
-        })
+        # Log hyperparameter terbaik
+        for param, value in best_params.items():
+            mlflow.log_param(param, value)
 
-        if tuning:
-            logger.info("Menggunakan GridSearchCV untuk tuning hyperparameter...")
-
-            param_grid = {
-                "n_estimators": [100, 150],
-                "max_depth": [None, 10, 20],
-                "min_samples_leaf": [1, 2],
-                "class_weight": ["balanced", None]
-            }
-
-            rf = RandomForestClassifier(random_state=random_state_split, n_jobs=-1)
-            grid_search = GridSearchCV(rf, param_grid, cv=3, scoring='accuracy', n_jobs=-1)
-            grid_search.fit(X_train, y_train)
-            model = grid_search.best_estimator_
-
-            best_params = grid_search.best_params_
-            logger.info(f"Best params dari GridSearchCV: {best_params}")
-            mlflow.log_params(best_params)
+        # Log metrik evaluasi
+        mlflow.log_metric("accuracy", accuracy)
+        
+        if "weighted avg" in report_dict:
+            mlflow.log_metric("precision_weighted", report_dict["weighted avg"]["precision"])
+            mlflow.log_metric("recall_weighted", report_dict["weighted avg"]["recall"])
+            mlflow.log_metric("f1_score_weighted", report_dict["weighted avg"]["f1-score"])
         else:
-            actual_max_depth_rf = none_or_int(max_depth_rf)
-            actual_class_weight_rf = none_or_str(class_weight_rf)
+            print("WARNING: 'weighted avg' tidak ditemukan di classification_report.")
 
-            mlflow.log_params({
-                "n_estimators": n_estimators,
-                "max_depth_rf": actual_max_depth_rf,
-                "min_samples_leaf_rf": min_samples_leaf_rf,
-                "class_weight_rf": actual_class_weight_rf,
-            })
+        # Set tag MLflow
+        mlflow.set_tag("stage", "tuning")
+        mlflow.set_tag("model_type", "RandomForest")
+        mlflow.set_tag("data_source", data_path) 
 
-            model = RandomForestClassifier(
-                n_estimators=n_estimators,
-                max_depth=actual_max_depth_rf,
-                min_samples_leaf=min_samples_leaf_rf,
-                class_weight=actual_class_weight_rf,
-                random_state=random_state_split,
-                n_jobs=-1
-            )
-            model.fit(X_train, y_train)
-            logger.info("Model berhasil dilatih tanpa tuning.")
+        # Log model
+        mlflow.sklearn.log_model(model, artifact_path="rf_model")
 
-        y_pred_test = model.predict(X_test)
-        accuracy_test = accuracy_score(y_test, y_pred_test)
-        report_dict = classification_report(y_test, y_pred_test, output_dict=True, zero_division=0)
-
-        precision_test_weighted = report_dict["weighted avg"]["precision"]
-        recall_test_weighted = report_dict["weighted avg"]["recall"]
-        f1_test_weighted = report_dict["weighted avg"]["f1-score"]
-
-        logger.info(f"Akurasi Test: {accuracy_test:.4f}")
-        logger.info(f"Classification Report (Test):\n{classification_report(y_test, y_pred_test, zero_division=0)}")
-
-        mlflow.log_metric("accuracy_test", accuracy_test)
-        mlflow.log_metric("precision_test_weighted", precision_test_weighted)
-        mlflow.log_metric("recall_test_weighted", recall_test_weighted)
-        mlflow.log_metric("f1_test_weighted", f1_test_weighted)
-        logger.info("Metrik berhasil di-log ke MLflow.")
-
-        mlflow.sklearn.log_model(model, model_artifact_path)
-        logger.info(f"Model berhasil di-log ke MLflow sebagai artefak: {model_artifact_path}")
-
-        print(f"MLFLOW_RUN_ID:{run_id}")
-        print(f"MLFLOW_MODEL_PATH:{model_artifact_path}")
-
-        mlflow.set_tag("stage", "ci_training_advanced")
-        mlflow.set_tag("data_version", "processed_v1")
-        logger.info("Run MLflow selesai.")
-
-if __name__ == '__main__':
-    train_model()
+        print(f"Tuning selesai dan model berhasil dicatat ke MLflow DagsHub (Eksperimen: {mlflow.active_run().info.experiment_id}, Run: {mlflow.active_run().info.run_id})")
