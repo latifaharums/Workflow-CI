@@ -40,6 +40,23 @@ jobs:
         python -m pip install --upgrade pip
         pip install mlflow python-dotenv
 
+    - name: Ensure Experiment Exists
+      run: |
+        python <<EOF
+        import mlflow
+        from mlflow.tracking import MlflowClient
+        import os
+
+        client = MlflowClient()
+        experiment_name = os.getenv("EXPERIMENT_NAME")
+        experiment = client.get_experiment_by_name(experiment_name)
+        if experiment is None:
+            client.create_experiment(experiment_name)
+            print(f"Experiment '{experiment_name}' created.")
+        else:
+            print(f"Experiment '{experiment_name}' already exists.")
+        EOF
+
     - name: Run MLflow Project
       run: |
         mlflow run . --env-manager=local --run-name rf_fixed_run -P data_path=processed_winequality-red.csv
@@ -49,19 +66,22 @@ jobs:
         echo "Getting latest run ID..."
         python <<EOF
         import mlflow
-        client = mlflow.tracking.MlflowClient()
-        experiment = client.get_experiment_by_name("${{ env.EXPERIMENT_NAME }}")
+        from mlflow.tracking import MlflowClient
+        import os
+
+        client = MlflowClient()
+        experiment_name = os.getenv("EXPERIMENT_NAME")
+        experiment = client.get_experiment_by_name(experiment_name)
         if experiment is None:
-          raise Exception("Experiment not found.")
+            raise Exception("Experiment not found.")
         runs = client.search_runs(experiment_ids=[experiment.experiment_id], order_by=["start_time DESC"])
         if not runs:
-          raise Exception("No runs found in the experiment.")
+            raise Exception("No runs found in the experiment.")
         run_id = runs[0].info.run_id
         print(f"Latest run ID: {run_id}")
-        with open("${GITHUB_ENV}", "a") as f:
-          f.write(f"RUN_ID={run_id}\n")
+        with open(os.environ["GITHUB_ENV"], "a") as f:
+            f.write(f"RUN_ID={run_id}\n")
         EOF
-
 
     - name: Install Python Dependencies from MLProject
       run: |
