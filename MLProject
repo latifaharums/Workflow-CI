@@ -5,7 +5,7 @@ conda_env: conda.yaml
 entry_points:
   main:
     parameters:
-      csv_url: {type: str, default: "processed_winequality.csv"}
+      csv_url: {type: str, default: "processed_winequality-red.csv"}
       target_var: {type: str, default: "quality"}
     command: >
       python modelling.py --csv_url {csv_url} --target_var {target_var}
