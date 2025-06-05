@@ -7,5 +7,6 @@ entry_points:
     parameters:
       csv_url: {type: str, default: "processed_winequality-red.csv"}
       target_var: {type: str, default: "quality"}
+      data_path: {type: str, default: "processed_winequality-red.csv"} 
     command: >
-      python modelling.py --csv_url {csv_url} --target_var {target_var}
+      python modelling.py --csv_url {csv_url} --target_var {target_var} --data_path {data_path}
